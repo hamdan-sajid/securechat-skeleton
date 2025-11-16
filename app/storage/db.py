@@ -15,7 +15,7 @@ def get_db_connection():
     """Get MySQL database connection."""
     return pymysql.connect(
         host=os.getenv('DB_HOST', 'localhost'),
-        port=int(os.getenv('DB_PORT', 3306)),
+        port=int(os.getenv('DB_PORT', 3307)),
         user=os.getenv('DB_USER', 'scuser'),
         password=os.getenv('DB_PASSWORD', 'scpass'),
         database=os.getenv('DB_NAME', 'securechat'),

@@ -1,2 +1,126 @@
-"""Issue server/client cert signed by Root CA (SAN=DNSName(CN)).""" 
-raise NotImplementedError("students: implement cert issuance")
+"""Issue server/client cert signed by Root CA (SAN=DNSName(CN))."""
+
+import argparse
+import os
+from datetime import datetime, timedelta
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.backends import default_backend
+from cryptography.x509.oid import NameOID
+
+
+def load_ca_key(ca_key_path: str):
+    """Load CA private key."""
+    with open(ca_key_path, "rb") as f:
+        return serialization.load_pem_private_key(f.read(), password=None, backend=default_backend())
+
+
+def load_ca_cert(ca_cert_path: str):
+    """Load CA certificate."""
+    with open(ca_cert_path, "rb") as f:
+        return x509.load_pem_x509_certificate(f.read(), default_backend())
+
+
+def generate_certificate(cn: str, ca_key_path: str, ca_cert_path: str, output_prefix: str, output_dir: str = "certs"):
+    """
+    Generate a certificate signed by the CA.
+    
+    Args:
+        cn: Common Name for the certificate
+        ca_key_path: path to CA private key
+        ca_cert_path: path to CA certificate
+        output_prefix: prefix for output files (e.g., "server" or "client")
+        output_dir: directory to save certificates
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Load CA key and certificate
+    ca_key = load_ca_key(ca_key_path)
+    ca_cert = load_ca_cert(ca_cert_path)
+    
+    # Generate RSA private key (2048 bits)
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+        backend=default_backend()
+    )
+    
+    # Create certificate request
+    subject = x509.Name([
+        x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
+        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "CA"),
+        x509.NameAttribute(NameOID.LOCALITY_NAME, "San Francisco"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "SecureChat"),
+        x509.NameAttribute(NameOID.COMMON_NAME, cn),
+    ])
+    
+    # Build certificate
+    cert = x509.CertificateBuilder().subject_name(
+        subject
+    ).issuer_name(
+        ca_cert.subject
+    ).public_key(
+        private_key.public_key()
+    ).serial_number(
+        x509.random_serial_number()
+    ).not_valid_before(
+        datetime.utcnow()
+    ).not_valid_after(
+        datetime.utcnow() + timedelta(days=365)  # 1 year
+    ).add_extension(
+        x509.SubjectAlternativeName([
+            x509.DNSName(cn),
+        ]),
+        critical=False,
+    ).add_extension(
+        x509.KeyUsage(
+            digital_signature=True,
+            key_encipherment=True,
+            key_agreement=False,
+            content_commitment=False,
+            data_encipherment=False,
+            encipher_only=False,
+            decipher_only=False,
+            key_cert_sign=False,
+            crl_sign=False
+        ),
+        critical=True,
+    ).add_extension(
+        x509.ExtendedKeyUsage([
+            x509.ExtendedKeyUsageOID.CLIENT_AUTH,
+            x509.ExtendedKeyUsageOID.SERVER_AUTH,
+        ]),
+        critical=False,
+    ).sign(ca_key, hashes.SHA256(), default_backend())
+    
+    # Save private key
+    key_path = os.path.join(output_dir, f"{output_prefix}_key.pem")
+    with open(key_path, "wb") as f:
+        f.write(private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        ))
+    print(f"Private key saved to {key_path}")
+    
+    # Save certificate
+    cert_path = os.path.join(output_dir, f"{output_prefix}_cert.pem")
+    with open(cert_path, "wb") as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
+    print(f"Certificate saved to {cert_path}")
+    
+    print(f"\nCertificate for '{cn}' generated successfully!")
+    print(f"Certificate valid from {cert.not_valid_before} to {cert.not_valid_after}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Generate certificate signed by CA")
+    parser.add_argument("--cn", required=True, help="Common Name (e.g., server.local)")
+    parser.add_argument("--ca-key", default="certs/ca_key.pem", help="CA private key path")
+    parser.add_argument("--ca-cert", default="certs/ca_cert.pem", help="CA certificate path")
+    parser.add_argument("--out", required=True, help="Output prefix (e.g., server or client)")
+    parser.add_argument("--dir", default="certs", help="Output directory")
+    args = parser.parse_args()
+    
+    generate_certificate(args.cn, args.ca_key, args.ca_cert, args.out, args.dir)

@@ -51,8 +51,8 @@ py scripts/verify_receipt.py ^
   --message-cert certs/client_cert.pem
 
   py scripts/verify_receipt.py
-  --transcript transcripts/transcript_127.0.0.1_34854_1763129379291.txt 
-  --receipt transcripts/receipt_127.0.0.1_34854_1763129379291_server.json 
+  --transcript transcripts/transcript_127.0.0.1_6716_1763293340724.txt 
+  --receipt transcripts/receipt_127.0.0.1_6716_1763293340724_server.json 
   --cert certs/server_cert.pem 
   --message-cert certs/client_cert.pem
 
